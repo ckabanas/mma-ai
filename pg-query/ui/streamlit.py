@@ -244,18 +244,18 @@ Given the database schema below, generate a SQL query to answer the question.
 Question: {question}
 
 IMPORTANT GUIDELINES:
-1. Pay close attention to column semantics and meanings when choosing columns.
-2. Distinguish between similar but functionally different columns (e.g., order_date vs. delivery_date vs. dispatch_date).
+1. Pay close attention to column semantics and meanings when choosing tables and columns.
+2. Distinguish between similar but functionally different columns
 3. Use appropriate joins based on the relationships defined in the schema.
 4. Ensure data types match when making comparisons.
 5. Use table aliases for readability in complex queries.
 6. For date/time operations, use appropriate PostgreSQL functions.
+7. Use ILIKE statements for names, categories, notes so case singular and plural can be found
+8. Use OR statements when you believe the information could be on two different columns
 
 YOUR RESPONSE MUST FOLLOW THIS EXACT FORMAT:
 1. You MUST wrap your SQL query in triple backticks with the sql language specifier.
-2. Place ONLY the executable SQL query inside the backticks.
-3. The query inside the backticks must be valid SQL syntax with no comments.
-4. Provide only ONE query, not multiple options.
+2. Provide only ONE query, not multiple options.
 
 IMPORTANT: I will only execute the code found between the triple backticks, so make sure your complete query is contained there.
 """
@@ -292,7 +292,7 @@ IMPORTANT: I will only execute the code found between the triple backticks, so m
                                     st.error(f"Could not reconnect to database: {message}")
                                     st.info("Please wait a moment and try again.")
                                     st.stop()
-                                    
+
                             # Now execute the query
                             results, columns = st.session_state['db_analyzer'].execute_query(sql_query)
 
@@ -335,11 +335,11 @@ IMPORTANT: I will only execute the code found between the triple backticks, so m
 
                         except Exception as e:
                             st.error(f"Error executing the query: {str(e)}")
-                            
+
                             # Add a retry button for convenience
                             if st.button("Try Again", key="retry_query"):
                                 st.experimental_rerun()
-                            
+
                             # Generate explanation for the error
                             with st.spinner("Analyzing the error with LLM..."):
                                 error_explanation = st.session_state['llama_interface'].explain_results(
@@ -367,7 +367,7 @@ IMPORTANT: I will only execute the code found between the triple backticks, so m
                                                 st.error(f"Could not reconnect to database: {message}")
                                                 st.info("Please wait a moment and try again.")
                                                 st.stop()
-                                        
+
                                         results, columns = st.session_state['db_analyzer'].execute_query(fixed_query)
 
                                         st.success("Query executed successfully!")
