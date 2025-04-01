@@ -709,20 +709,7 @@ class DatabaseAnalyzer:
 
         schema_text = "# Database Schema\n\n"
 
-        # Add overall guidance for the model with emphasis on semantic distinctions
-        schema_text += """
-When interpreting column names and generating SQL queries, please note:
-- Pay careful attention to the semantic meaning of each column as provided below
-- Date columns with different names have specific business meanings (e.g., order_date vs. delivery_date vs. dispatch_date)
-- Primary keys are used to uniquely identify records
-- Foreign keys represent relationships between tables
-- Column semantics describe the intended meaning and use of each column
-- Respect data types when comparing or filtering values
-- Use appropriate joins based on the relationships defined below
-
-"""
-
-        # Describe each table and its columns
+        # Describe each table and its columns - simplified version
         for table_name, table_info in self.schema_info["tables"].items():
             schema_text += f"## Table: {table_name}"
 
@@ -731,114 +718,24 @@ When interpreting column names and generating SQL queries, please note:
                 schema_text += f" - {table_info['comment']}"
             schema_text += "\n\n"
 
-            # Create a markdown table for columns with semantics
-            schema_text += "| Column Name | Data Type | Nullable | Default | Primary Key | Meaning |\n"
-            schema_text += "|------------|-----------|----------|---------|-------------|--------|\n"
-
-            # Check if this table has a primary key
-            pk_columns = self.schema_info["primary_keys"].get(table_name, [])
+            # Create a markdown table focused only on column names and meanings
+            schema_text += "| Column Name | Meaning |\n"
+            schema_text += "|------------|--------|\n"
 
             for column in table_info["columns"]:
-                nullable = "YES" if column["nullable"] == "YES" else "NO"
-                default = column.get("default", "")
-                is_pk = "YES" if column["name"] in pk_columns else "NO"
                 semantics = column.get("semantics", "")
-
-                schema_text += f"| {column['name']} | {column['type']} | {nullable} | {default} | {is_pk} | {semantics} |\n"
-
-            # Add sample data if available
-            if table_name in self.schema_info.get("sample_data", {}) and self.schema_info["sample_data"][table_name]:
-                schema_text += "\nSample data:\n```\n"
-                sample_data = self.schema_info["sample_data"][table_name]
-                if sample_data:
-                    keys = sample_data[0].keys()
-                    schema_text += ", ".join(keys) + "\n"
-                    for row in sample_data[:2]:  # Just show first 2 rows
-                        schema_text += ", ".join(str(row[k]) for k in keys) + "\n"
-                schema_text += "```\n"
+                schema_text += f"| {column['name']} | {semantics} |\n"
 
             schema_text += "\n"
 
-        # Describe relationships with semantics
+        # Add simplified relationships section
         if self.schema_info["relationships"]:
             schema_text += "## Relationships\n\n"
 
             for rel in self.schema_info["relationships"]:
-                schema_text += f"- {rel['table']}.{rel['column']} → {rel['references_table']}.{rel['references_column']}"
-
-                # Add semantics for the relationship
-                fk_semantic = self.schema_info["column_semantics"].get(f"{rel['table']}.{rel['column']}", "")
-                pk_semantic = self.schema_info["column_semantics"].get(f"{rel['references_table']}.{rel['references_column']}", "")
-
-                if fk_semantic or pk_semantic:
-                    schema_text += f" (Connects "
-                    if fk_semantic:
-                        schema_text += f"{fk_semantic} "
-                    schema_text += f"to "
-                    if pk_semantic:
-                        schema_text += f"{pk_semantic}"
-                    else:
-                        schema_text += f"{rel['references_table']}"
-                    schema_text += ")"
-
-                schema_text += "\n"
-
-        # Add a special section for date columns to highlight their differences
-        date_columns = {}
-        for table, table_info in self.schema_info["tables"].items():
-            for column in table_info["columns"]:
-                if column["type"] in ('date', 'timestamp', 'timestamptz', 'datetime'):
-                    semantic = column.get("semantics", "")
-                    if semantic:
-                        date_columns[f"{table}.{column['name']}"] = semantic
-
-        if date_columns:
-            schema_text += "\n## Date/Time Column Reference\n\n"
-            schema_text += "When working with date/time columns, pay special attention to these semantics:\n\n"
-            schema_text += "| Column | Meaning |\n"
-            schema_text += "|--------|--------|\n"
-
-            for col, meaning in date_columns.items():
-                schema_text += f"| {col} | {meaning} |\n"
+                schema_text += f"- {rel['table']}.{rel['column']} → {rel['references_table']}.{rel['references_column']}\n"
 
             schema_text += "\n"
-
-            # Add special note about common date confusion points
-            schema_text += """
-### Important Date Column Distinctions
-
-When working with date columns, be careful to distinguish between columns with similar names but different business meanings:
-
-- **Order/Purchase dates** vs **Shipping/Dispatch dates** vs **Delivery dates**:
-  These represent different stages in an order lifecycle and should not be used interchangeably.
-
-- **Created dates** vs **Updated dates**:
-  "Created" columns represent when a record was first added, while "Updated" columns
-  show when it was last modified.
-
-- **Start dates** vs **End dates**:
-  These define time periods and should be used appropriately in range queries.
-"""
-
-        # Add common query patterns to help the LLM
-        schema_text += """
-## Query Generation Guidance
-
-When generating SQL queries:
-
-1. Use column semantics to select the appropriate columns for the business question
-2. For questions about timelines, identify which specific date columns are relevant
-3. When filtering by status, use the appropriate status column and values
-4. For questions about quantities or amounts, identify whether to use raw values or perform calculations
-5. Use appropriate joins based on the relationship semantics
-
-### Example Scenarios:
-
-- For "orders placed last month but not yet delivered", use both the order date column AND the delivery date column
-- For "customer spending patterns", focus on payment-related columns rather than just order totals
-- For inventory questions, use stock-related columns with the appropriate status filters
-- For "most profitable products", consider using margin or profit columns, not just revenue or price
-"""
 
         return schema_text
 
@@ -865,7 +762,7 @@ When generating SQL queries:
             except:
                 pass
             self.connect()
-            
+
         cursor = self.connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
         try:
             cursor.execute(query)
@@ -898,7 +795,7 @@ When generating SQL queries:
         """
         if not self.connection:
             return False
-            
+
         try:
             check_cursor = self.connection.cursor()
             check_cursor.execute("SELECT 1")
