@@ -27,7 +27,7 @@ spec:
     spec:
       containers:
       - name: postgresql
-        image: quay.io/daniel_casali/rentalco:v2
+        image: quay.io/daniel_casali/rentalco:latest
         ports:
         - containerPort: 5432
         env:
