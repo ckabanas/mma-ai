@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: text-to-sql
+  labels:
+    app: text-to-sql
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: text-to-sql
+  template:
+    metadata:
+      labels:
+        app: text-to-sql
+    spec:
+      containers:
+      - name: text-to-sql
+        image: quay.io/daniel_casali/texttosql:v2
+        ports:
+        - containerPort: 8080
+        resources:
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: text-to-sql-service
+  labels:
+    app: text-to-sql
+spec:
+  selector:
+    app: text-to-sql
+  ports:
+  - port: 80
+    targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: text-to-sql-route
+  labels:
+    app: text-to-sql
+spec:
+  to:
+    kind: Service
+    name: text-to-sql-service
+  port:
+    targetPort: 80

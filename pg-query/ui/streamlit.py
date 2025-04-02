@@ -62,7 +62,7 @@ def main():
 
     # Database connection inputs
     st.sidebar.header("Database Connection")
-    db_host = st.sidebar.text_input("Host", "localhost")
+    db_host = st.sidebar.text_input("Host", "rentalco-service")
     db_port = st.sidebar.text_input("Port", "5432")
     db_name = st.sidebar.text_input("Database Name")
     db_user = st.sidebar.text_input("Username")
@@ -250,7 +250,7 @@ IMPORTANT GUIDELINES:
 4. Ensure data types match when making comparisons.
 5. Use table aliases for readability in complex queries.
 6. For date/time operations, use appropriate PostgreSQL functions.
-7. Use ILIKE statements for names, categories, notes so case singular and plural can be found
+7. Use ILIKE statements for names, categories etc.
 8. Use OR statements when you believe the information could be on two different columns
 
 YOUR RESPONSE MUST FOLLOW THIS EXACT FORMAT:
