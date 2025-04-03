@@ -31,6 +31,8 @@ spec:
         ports:
         - containerPort: 5432
         env:
+        - name: PGDATA
+          value: "/var/lib/postgresql/data/pgdata"
         - name: POSTGRES_PASSWORD
           value: "postgres"  # You should use a secret for this in production
         - name: POSTGRES_USER
