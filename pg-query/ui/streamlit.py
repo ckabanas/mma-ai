@@ -1,25 +1,26 @@
 import streamlit as st
 import pandas as pd
 import time
-import asyncio
 import json
 import re
+import asyncio
+from typing import List, Dict, Any, Optional
 
-# Import our modules
+# Import our modified module
 from database_analyzer import DatabaseAnalyzer
 from llama_interface import LlamaInterface
 from utils import extract_sql_from_response
 
-# Set page config at the top level before any other Streamlit commands
+# Set page config
 st.set_page_config(
-    page_title="SQL Assistant (Using Power MMA)",
+    page_title="SQL Assistant",
     page_icon="🤖",
     layout="wide"
 )
 
 def main():
-    st.title("SQL Assistant powered by Power10 MMA")
-    st.write("Ask questions about your PostgreSQL database in plain English. Enhanced with intelligent schema semantics.")
+    st.title("SQL Assistant")
+    st.write("Ask questions about your PostgreSQL database in plain English")
 
     # Initialize all session state variables
     if 'connected' not in st.session_state:
@@ -77,15 +78,13 @@ def main():
         else:
             with st.spinner("Connecting to database and analyzing schema..."):
                 try:
-                    # Initialize the database analyzer with LLM integration
+                    # Initialize the simplified database analyzer
                     db_analyzer = DatabaseAnalyzer(
                         dbname=db_name,
                         user=db_user,
                         password=db_password,
                         host=db_host,
-                        port=db_port,
-                        llm_host=llama_host,
-                        llm_port=llama_port
+                        port=db_port
                     )
 
                     # Try to connect
@@ -94,8 +93,8 @@ def main():
                     if success:
                         st.sidebar.success(message)
 
-                        # Analyze the schema with LLM-enhanced semantics
-                        with st.spinner("Analyzing database schema and inferring column semantics with LLM..."):
+                        # Analyze the schema (simplified)
+                        with st.spinner("Analyzing database schema..."):
                             schema_info = db_analyzer.analyze_schema()
                             schema_description = db_analyzer.generate_schema_description()
                             schema_for_llm = db_analyzer.generate_schema_for_llm()
@@ -106,105 +105,16 @@ def main():
                         st.session_state['schema_for_llm'] = schema_for_llm
                         st.session_state['connected'] = True
 
-                        st.sidebar.success("Successfully connected and analyzed the database schema with LLM-enhanced semantics!")
+                        st.sidebar.success("Successfully connected and analyzed the database schema!")
                     else:
                         st.sidebar.error(message)
                 except Exception as e:
                     st.sidebar.error(f"Error: {str(e)}")
 
-    # LLM-Enhanced Schema Analysis section in sidebar
-    if st.session_state.get('connected', False):
-        st.sidebar.header("LLM Enhanced Schema Analysis")
-        st.sidebar.write("Enhance database understanding with LLM-powered semantic analysis.")
-
-        if st.sidebar.button("Run Full Schema Analysis"):
-            if st.session_state.get('llm_initialized', False):
-                with st.spinner("Analyzing complete database schema with LLM..."):
-                    try:
-                        schema_info = st.session_state['db_analyzer'].analyze_schema_with_llm()
-                        st.session_state['schema_description'] = st.session_state['db_analyzer'].generate_schema_description()
-                        st.session_state['schema_for_llm'] = st.session_state['db_analyzer'].generate_schema_for_llm()
-                        st.sidebar.success("Schema analysis completed with LLM enhancement!")
-                    except Exception as e:
-                        st.sidebar.error(f"Error in LLM schema analysis: {str(e)}")
-                        st.sidebar.info("Falling back to heuristic analysis...")
-                        schema_info = st.session_state['db_analyzer'].analyze_schema_heuristic()
-                        st.session_state['schema_description'] = st.session_state['db_analyzer'].generate_schema_description()
-                        st.session_state['schema_for_llm'] = st.session_state['db_analyzer'].generate_schema_for_llm()
-            else:
-                st.sidebar.error("Please initialize the LLM Runtime interface first.")
-
-        # Allow analyzing individual tables
-        tables = st.session_state['db_analyzer'].get_tables() if st.session_state.get('db_analyzer') else []
-        if tables:
-            selected_table = st.sidebar.selectbox("Select a table to enhance", [""] + tables)
-
-            if selected_table and st.sidebar.button(f"Enhance table: {selected_table}"):
-                if st.session_state.get('llm_initialized', False):
-                    with st.spinner(f"Analyzing table {selected_table} with LLM for enhanced semantics..."):
-                        try:
-                            table_info = st.session_state['db_analyzer'].analyze_table_with_llm(selected_table)
-
-                            # Update the main schema info with the enhanced table
-                            if 'schema_info' in st.session_state:
-                                st.session_state['schema_info']['tables'][selected_table] = table_info
-
-                            # Regenerate schema descriptions
-                            st.session_state['schema_description'] = st.session_state['db_analyzer'].generate_schema_description()
-                            st.session_state['schema_for_llm'] = st.session_state['db_analyzer'].generate_schema_for_llm()
-
-                            st.sidebar.success(f"Enhanced semantic analysis of {selected_table} completed!")
-                        except Exception as e:
-                            st.sidebar.error(f"Error enhancing table: {str(e)}")
-                else:
-                    st.sidebar.error("Please initialize the LLM Runtime interface first.")
-
     # Option to view database schema
     if st.session_state.get('connected', False):
         with st.sidebar.expander("View Database Schema"):
-            # Add tabs for different schema views
-            schema_tab1, schema_tab2 = st.tabs(["Schema Overview", "Column Semantics"])
-
-            with schema_tab1:
-                st.text(st.session_state.get('schema_description', "No schema description available"))
-
-            with schema_tab2:
-                # Display column semantics in a more structured format
-                if ('db_analyzer' in st.session_state and
-                    st.session_state['db_analyzer'] is not None and
-                    hasattr(st.session_state['db_analyzer'], 'column_semantics') and
-                    st.session_state['db_analyzer'].column_semantics):
-
-                    semantics = st.session_state['db_analyzer'].column_semantics
-                    st.subheader("Column Semantics from LLM")
-
-                    # Group semantics by table
-                    tables = {}
-                    for col_key, meaning in semantics.items():
-                        try:
-                            table_name, col_name = col_key.split('.')
-                            if table_name not in tables:
-                                tables[table_name] = []
-                            tables[table_name].append((col_name, meaning))
-                        except ValueError:
-                            # Handle case where col_key doesn't have expected format
-                            continue
-
-                    # Create a selectbox to choose which table to view
-                    table_names = sorted(tables.keys())
-                    if table_names:
-                        selected_table = st.selectbox("Select a table", table_names)
-
-                        # Show columns for the selected table
-                        if selected_table in tables:
-                            st.subheader(f"Table: {selected_table}")
-                            columns = tables[selected_table]
-                            semantics_df = pd.DataFrame(columns, columns=['Column', 'Semantic Meaning'])
-                            st.dataframe(semantics_df)
-                    else:
-                        st.info("No tables with semantics found.")
-                else:
-                    st.info("No column semantics available. Connect to a database and analyze the schema first.")
+            st.text(st.session_state.get('schema_description', "No schema description available"))
 
     # Main area for question input
     st.header("Ask a Question")
@@ -234,7 +144,7 @@ def main():
             with results_container:
                 try:
                     with st.spinner("Generating SQL query with LLM..."):
-                        # Generate SQL with LLM using enhanced schema
+                        # Generate SQL with LLM using schema
                         prompt = f"""
 You are an expert SQL query generator for PostgreSQL databases.
 Given the database schema below, generate a SQL query to answer the question.
@@ -248,18 +158,16 @@ IMPORTANT GUIDELINES:
 2. Distinguish between similar but functionally different columns
 3. Use appropriate joins based on the relationships defined in the schema.
 4. Ensure data types match when making comparisons.
-5. Use table aliases for readability in complex queries.
-6. For date/time operations, use appropriate PostgreSQL functions.
-7. Use ILIKE statements for names, categories etc.
-8. Use OR statements when you believe the information could be on two different columns
+5. For date/time operations, use appropriate PostgreSQL functions.
+7. Use OR statements when you believe the information could be on two different columns
+8. Provide only ONE query, not multiple options.
+9. Use LIMIT and OFFSET if you need to return a limited number of results.
 
-YOUR RESPONSE MUST FOLLOW THIS EXACT FORMAT:
-1. You MUST wrap your SQL query in triple backticks with the sql language specifier.
-2. Provide only ONE query, not multiple options.
+REALLY IMPORTANT USE ILIKE STATEMENTS with % for everything that is text in the query
 
-IMPORTANT: I will only execute the code found between the triple backticks, so make sure your complete query is contained there.
+Just the SQL Statement suffice, do not explain or send anything further
 """
-                        raw_response = asyncio.run(st.session_state['llama_interface'].get_llama_response(prompt))
+                        raw_response = st.session_state['llama_interface'].get_llama_response(prompt)
 
                         # Display the raw response in an expander for debugging
                         with st.expander("Raw LLM Response", expanded=False):
@@ -298,11 +206,18 @@ IMPORTANT: I will only execute the code found between the triple backticks, so m
 
                             # Generate explanation
                             with st.spinner("Generating explanation with LLM..."):
-                                explanation = st.session_state['llama_interface'].explain_results(
-                                    question,
-                                    sql_query,
-                                    results
-                                )
+                                explanation_prompt = f"""
+Question: {question}
+
+SQL Query: {sql_query}
+
+Results: {json.dumps(results[:10], indent=2, default=str)}
+
+Provide a natural language explanation of these results that directly answers the original question.
+Keep your explanation clear, concise, and focused on what the user actually asked.
+If the results contain a lot of data, summarize the key points.
+"""
+                                explanation = st.session_state['llama_interface'].get_llama_response(explanation_prompt)
 
                             # Display explanation
                             st.subheader("Answer")
@@ -336,18 +251,19 @@ IMPORTANT: I will only execute the code found between the triple backticks, so m
                         except Exception as e:
                             st.error(f"Error executing the query: {str(e)}")
 
-                            # Add a retry button for convenience
-                            if st.button("Try Again", key="retry_query"):
-                                st.experimental_rerun()
-
                             # Generate explanation for the error
                             with st.spinner("Analyzing the error with LLM..."):
-                                error_explanation = st.session_state['llama_interface'].explain_results(
-                                    question,
-                                    sql_query,
-                                    [],
-                                    error=str(e)
-                                )
+                                error_prompt = f"""
+Question: {question}
+
+SQL Query: {sql_query}
+
+Error: {str(e)}
+
+Please explain what went wrong with this query in simple terms and suggest how to fix it.
+Be specific about any syntax errors or invalid references.
+"""
+                                error_explanation = st.session_state['llama_interface'].get_llama_response(error_prompt)
 
                             st.subheader("Error Analysis")
                             st.write(error_explanation)
@@ -400,10 +316,6 @@ IMPORTANT: I will only execute the code found between the triple backticks, so m
 
                                     except Exception as e:
                                         st.error(f"Error executing fixed query: {str(e)}")
-                                        # Add a retry button
-                                        if st.button("Try Again", key="retry_fixed"):
-                                            st.experimental_rerun()
-
 
                 except Exception as e:
                     st.error(f"Error generating SQL: {str(e)}")
@@ -479,7 +391,8 @@ IMPORTANT: I will only execute the code found between the triple backticks, so m
 
                 # Show results info
                 st.markdown(f"**Results:** {item['results_count']} rows returned")
-                st.markdown(f"**Explanation:** {item['explanation']}")
+                if 'explanation' in item:
+                    st.markdown(f"**Explanation:** {item['explanation']}")
 
                 # Add a "Use this query" button
                 if st.button(f"Use this query", key=f"use_query_{i}"):
@@ -503,29 +416,6 @@ IMPORTANT: I will only execute the code found between the triple backticks, so m
         3. **Ask questions** about your data in plain English
         4. LLM Runtime will generate an SQL query, execute it, and explain the results
 
-        ### Enhanced Column Semantics with LLM
-
-        This improved version uses the LLM to generate detailed semantics for database columns and tables:
-
-        - **Automatic analysis**: When connecting to a database, the tool can use LLM to analyze every column and table
-        - **Interactive refinement**: You can enhance specific tables through the "LLM Enhanced Schema Analysis" panel in the sidebar
-        - **Context-aware analysis**: The LLM examines relationships between tables, sample data, and column naming patterns
-
-        These LLM-generated semantics provide much more accurate descriptions than pattern-based heuristics alone, enabling:
-
-        - More precise SQL query generation
-        - Better understanding of your database structure
-        - Clearer explanations of results in business terms
-
-        ### Understanding Column Semantics
-
-        With LLM enhancement, the tool can understand column meanings beyond simple naming patterns:
-
-        - It recognizes domain-specific terminology in your database
-        - It understands the relationships between tables and columns
-        - It can infer meaning from sample data values
-        - It provides business-oriented descriptions rather than technical definitions
-
         ### Effective Question Tips
 
         - **Be specific** about what you're looking for
@@ -546,20 +436,10 @@ IMPORTANT: I will only execute the code found between the triple backticks, so m
     # Footer
     st.sidebar.markdown("---")
     st.sidebar.info("""
-    **SQL Assistant powered by Power10 MMA with Enhanced Schema Semantics**
+    **SQL Assistant**
 
     This app connects to your LLM Runtime API service to convert natural
     language questions into SQL queries for PostgreSQL databases.
-
-    The app leverages LLM to generate detailed semantic descriptions of
-    your database structure, tables, and columns for improved understanding
-    and more accurate query generation.
-
-    Key features:
-    - LLM-powered schema analysis for detailed column semantics
-    - Table-by-table semantic enhancement
-    - Improved natural language understanding of your database
-    - Strict SQL execution safety checks
 
     Make sure your LLM Runtime API service is running and accessible at
     the host and port provided in the settings.

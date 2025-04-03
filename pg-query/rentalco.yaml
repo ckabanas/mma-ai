@@ -5,6 +5,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
+  storageClassName: "" # Uses the default StorageClass
   resources:
     requests:
       storage: 10Gi
@@ -27,7 +28,7 @@ spec:
     spec:
       containers:
       - name: postgresql
-        image: quay.io/daniel_casali/rentalco:latest
+        image: quay.io/daniel_casali/rentalco:v2
         ports:
         - containerPort: 5432
         env:
@@ -36,7 +37,7 @@ spec:
         - name: POSTGRES_USER
           value: "postgres"
         - name: POSTGRES_DB
-          value: "postgres"
+          value: "rentalco"
         resources:
           limits:
             memory: "512Mi"

@@ -1,0 +1,91 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: textsql-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: textsql-server
+  template:
+    metadata:
+      labels:
+        app: textsql-server
+    spec:
+      initContainers:
+        - name: fetch-model-data
+          image: ubi8
+          volumeMounts:
+            - name: textsql-models
+              mountPath: /models
+          command:
+            - sh
+            - '-c'
+            - |
+              if [ ! -f /models/text-2-sql-Llama-3.2-3B-Q4_K_M.gguf ] ; then
+                curl -L https://huggingface.co/tensorblock/text-2-sql-Llama-3.2-3B-GGUF/resolve/main/text-2-sql-Llama-3.2-3B-Q4_K_M.gguf --output /models/text-2-sql-Llama-3.2-3B-Q4_K_M.gguf
+              else
+                echo "model /models/text-2-sql-Llama-3.2-3B-Q4_K_M.gguf already present"
+              fi
+          resources: {}
+      containers:
+        - name: textsql
+          image: quay.io/daniel_casali/llama.cpp-mma:v4
+          imagePullPolicy: Always
+          args: ["-m", "/models/text-2-sql-Llama-3.2-3B-Q4_K_M.gguf", "--prio", "3", "-c", "40960","-b", "256", "-t", "32", "-n", "-1"]
+          ports:
+            - containerPort: 8080
+              name: http
+          volumeMounts:
+            - name: textsql-models
+              mountPath: /models
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+              scheme: HTTP
+            initialDelaySeconds: 30
+            timeoutSeconds: 1
+            periodSeconds: 20
+            successThreshold: 1
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+              scheme: HTTP
+            timeoutSeconds: 1
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+      volumes:
+        - name: textsql-models
+          emptyDir:
+            medium: Memory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: textsql-service
+spec:
+  selector:
+    app: textsql-server
+  ports:
+    - port: 8080
+      targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: textsql-route
+spec:
+  to:
+    kind: Service
+    name: textsql-service
+  port:
+    targetPort: 8080
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

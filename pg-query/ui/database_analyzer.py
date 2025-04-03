@@ -1,17 +1,11 @@
 import psycopg2
 import psycopg2.extras
 from typing import List, Dict, Any, Tuple, Optional
-import asyncio
-import streamlit as st
-
-from llm_semantic_analyzer import LLMSemanticAnalyzer
-from utils import infer_column_semantics_heuristic
 
 class DatabaseAnalyzer:
-    """Class to analyze PostgreSQL database schema and execute queries with LLM-enhanced semantics."""
+    """Simplified class to analyze PostgreSQL database schema and execute queries."""
 
-    def __init__(self, dbname: str, user: str, password: str, host: str = "localhost", port: str = "5432",
-                 llm_host: str = "llama-service", llm_port: str = "8080"):
+    def __init__(self, dbname: str, user: str, password: str, host: str = "localhost", port: str = "5432"):
         """Initialize with database connection parameters."""
         self.connection_params = {
             "dbname": dbname,
@@ -22,13 +16,7 @@ class DatabaseAnalyzer:
         }
         self.connection = None
         self.schema_info = {}
-        self.column_semantics = {}  # Store inferred meanings of column names
-
-        # Initialize the semantic analyzer
-        self.semantic_analyzer = LLMSemanticAnalyzer(
-            llm_service_host=llm_host,
-            llm_service_port=llm_port
-        )
+        self.column_semantics = {}  # Store basic meanings of column names
 
     def connect(self) -> Tuple[bool, str]:
         """Establish connection to the database."""
@@ -189,22 +177,6 @@ class DatabaseAnalyzer:
 
         return result[0] if result and result[0] else ""
 
-    def get_sample_data_for_column(self, table_name: str, column_name: str, limit: int = 5) -> List[Any]:
-        """Get distinct sample values for a specific column."""
-        if not self.connection:
-            self.connect()
-
-        cursor = self.connection.cursor()
-        try:
-            # Use DISTINCT to get unique values and limit results
-            cursor.execute(f"SELECT DISTINCT {column_name} FROM {table_name} WHERE {column_name} IS NOT NULL LIMIT {limit}")
-            return [row[0] for row in cursor.fetchall()]
-        except Exception as e:
-            print(f"Error getting sample data for column: {e}")
-            return []
-        finally:
-            cursor.close()
-
     def get_sample_data(self, table_name: str, limit: int = 3) -> List[Dict[str, Any]]:
         """Get sample data from a table."""
         if not self.connection:
@@ -229,348 +201,9 @@ class DatabaseAnalyzer:
         finally:
             cursor.close()
 
-    def get_column_semantics(self, table_name: str, column_name: str) -> str:
-        """
-        Get the semantic meaning for a specific column.
-        If not available, infer it on demand using the LLM.
-        """
-        column_key = f"{table_name}.{column_name}"
-
-        # Check if we already have semantics for this column
-        if column_key in self.column_semantics:
-            return self.column_semantics[column_key]
-
-        # Try to get official comment from database first
-        comment = self.get_comment_for_column(table_name, column_name)
-        if comment:
-            self.column_semantics[column_key] = comment
-            return comment
-
-        # Get column type and sample values
-        cursor = self.connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
-        cursor.execute("""
-            SELECT data_type
-            FROM information_schema.columns
-            WHERE table_schema = 'public'
-            AND table_name = %s
-            AND column_name = %s
-        """, (table_name, column_name))
-
-        result = cursor.fetchone()
-        data_type = result['data_type'] if result else 'unknown'
-
-        # Get sample values
-        sample_values = self.get_sample_data_for_column(table_name, column_name)
-
-        # Get other columns in the table for context
-        other_columns = self.get_table_columns(table_name)
-
-        # Get foreign key relationships
-        foreign_keys = self.get_foreign_keys()
-
-        cursor.close()
-
-        # Use LLM to infer semantics with enhanced context
-        try:
-            semantics = self.semantic_analyzer.infer_column_semantics(
-                table_name,
-                column_name,
-                data_type,
-                sample_values,
-                other_columns,
-                foreign_keys
-            )
-            self.column_semantics[column_key] = semantics
-            return semantics
-        except Exception as e:
-            # Fallback to heuristic approach if LLM fails
-            print(f"LLM inference failed for {column_key}: {e}")
-            semantics = infer_column_semantics_heuristic(table_name, column_name, data_type)
-            self.column_semantics[column_key] = semantics
-            return semantics
-
-    async def analyze_column_semantics_async(self, batch_size: int = 10) -> Dict[str, str]:
-        """
-        Analyze all columns in the database to infer their semantics using the LLM.
-        Uses batching to reduce the number of LLM API calls.
-
-        Args:
-            batch_size: Number of columns to process in a single LLM call
-
-        Returns:
-            Dictionary mapping column keys (table.column) to their semantic descriptions
-        """
-        if not self.connection:
-            self.connect()
-
-        # Get all tables
-        tables = self.get_tables()
-        foreign_keys = self.get_foreign_keys()
-
-        # Collect all columns with their types and sample values
-        all_columns = []
-
-        # Show progress info if running in Streamlit
-        progress_placeholder = None
-        if 'st' in globals():
-            progress_placeholder = st.empty()
-
-        for i, table in enumerate(tables):
-            if progress_placeholder:
-                progress_placeholder.text(f"Analyzing table {i+1} of {len(tables)}: {table}")
-
-            columns = self.get_table_columns(table)
-            sample_data = self.get_sample_data(table, limit=3)
-
-            for column in columns:
-                column_info = {
-                    'table_name': table,
-                    'column_name': column['name'],
-                    'data_type': column['type'],
-                    'sample_values': []
-                }
-
-                # Add sample values if available
-                if sample_data:
-                    for row in sample_data:
-                        if column['name'] in row and row[column['name']] is not None:
-                            column_info['sample_values'].append(row[column['name']])
-
-                all_columns.append(column_info)
-
-        # Process columns in batches with enhanced context
-        semantics = {}
-        batch_count = (len(all_columns) + batch_size - 1) // batch_size  # Ceiling division
-
-        for i in range(0, len(all_columns), batch_size):
-            if progress_placeholder:
-                progress_placeholder.text(f"Processing batch {i//batch_size + 1} of {batch_count} ({len(all_columns)} columns total)")
-
-            batch = all_columns[i:i+batch_size]
-            try:
-                batch_results = await self.semantic_analyzer.batch_infer_column_semantics_async(batch, foreign_keys)
-                semantics.update(batch_results)
-            except Exception as e:
-                print(f"Error processing batch: {e}")
-                # Fallback to heuristic approach for failed batch
-                for col_info in batch:
-                    col_key = f"{col_info['table_name']}.{col_info['column_name']}"
-                    semantics[col_key] = infer_column_semantics_heuristic(
-                        col_info['table_name'],
-                        col_info['column_name'],
-                        col_info['data_type']
-                    )
-
-            # Add a small delay to avoid overwhelming the LLM service
-            await asyncio.sleep(0.5)
-
-        if progress_placeholder:
-            progress_placeholder.empty()
-
-        self.column_semantics = semantics
-        return semantics
-
-    def analyze_column_semantics(self, batch_size: int = 10) -> Dict[str, str]:
-        """Synchronous wrapper for analyze_column_semantics_async."""
-        return asyncio.run(self.analyze_column_semantics_async(batch_size))
-
-    async def analyze_table_with_llm_async(self, table_name: str) -> Dict[str, Any]:
-        """
-        Analyze a specific table using LLM for enhanced semantics.
-        Useful for focused analysis of important tables.
-        """
-        if not self.connection:
-            self.connect()
-
-        # Get table details
-        columns = self.get_table_columns(table_name)
-        table_comment = self.get_comment_for_table(table_name)
-        sample_data = self.get_sample_data(table_name)
-        foreign_keys = self.get_foreign_keys()
-
-        # If no existing table comment, generate one with LLM
-        if not table_comment:
-            try:
-                table_comment = await self.semantic_analyzer.infer_table_semantics_async(
-                    table_name, columns, sample_data
-                )
-            except Exception as e:
-                print(f"Error generating table semantics: {e}")
-                table_comment = ""
-
-        # Process columns with enhanced LLM analysis
-        processed_columns = []
-
-        # Process columns in smaller batches to avoid overwhelming LLM service
-        batch_size = 5
-        for i in range(0, len(columns), batch_size):
-            batch = columns[i:i+batch_size]
-
-            # Create tasks for parallel processing
-            tasks = []
-            for column in batch:
-                # Get sample values for this column
-                sample_values = self.get_sample_data_for_column(table_name, column['name'])
-
-                # Create task to get semantics
-                task = self.semantic_analyzer.infer_column_semantics_async(
-                    table_name,
-                    column['name'],
-                    column['type'],
-                    sample_values,
-                    columns,  # Pass all columns for context
-                    foreign_keys  # Pass foreign keys for relationship context
-                )
-                tasks.append((column, task))
-
-            # Execute all tasks and wait for results
-            for column, task in tasks:
-                try:
-                    semantics = await task
-                    column_with_semantics = column.copy()
-
-                    if semantics:
-                        column_with_semantics["semantics"] = semantics
-                        # Update global semantics dict
-                        self.column_semantics[f"{table_name}.{column['name']}"] = semantics
-
-                    processed_columns.append(column_with_semantics)
-                except Exception as e:
-                    print(f"Error processing column {column['name']}: {e}")
-                    # Add column without semantics on error
-                    processed_columns.append(column.copy())
-
-            # Small delay between batches
-            await asyncio.sleep(0.5)
-
-        # Return the enhanced table info
-        return {
-            "columns": processed_columns,
-            "comment": table_comment if table_comment else "",
-            "sample_data": sample_data
-        }
-
-    def analyze_table_with_llm(self, table_name: str) -> Dict[str, Any]:
-        """Synchronous wrapper for analyze_table_with_llm_async."""
-        return asyncio.run(self.analyze_table_with_llm_async(table_name))
-
-    async def analyze_schema_with_llm_async(self) -> Dict[str, Any]:
-        """
-        Analyze the complete database schema using LLM for enhanced semantics.
-        Processes tables and columns in batches with progress tracking.
-        """
-        tables = self.get_tables()
-        foreign_keys = self.get_foreign_keys()
-        primary_keys = self.get_primary_keys()
-
-        schema_info = {
-            "tables": {},
-            "relationships": [],
-            "primary_keys": primary_keys,
-            "sample_data": {},
-            "column_semantics": {}
-        }
-
-        # Show progress if running in Streamlit
-        progress_placeholder = None
-        progress_bar = None
-        if 'st' in globals():
-            progress_placeholder = st.empty()
-            progress_bar = st.progress(0.0)
-
-        # First, batch analyze all column semantics
-        self.column_semantics = await self.analyze_column_semantics_async(batch_size=10)
-        schema_info["column_semantics"] = self.column_semantics
-
-        # Process each table
-        for i, table in enumerate(tables):
-            if progress_placeholder:
-                progress_placeholder.text(f"Processing table {i+1}/{len(tables)}: {table}")
-                progress_bar.progress((i+1)/len(tables))
-
-            # Get table details
-            columns = self.get_table_columns(table)
-            table_comment = self.get_comment_for_table(table)
-
-            # If no existing comment, generate with LLM
-            if not table_comment:
-                try:
-                    sample_data = self.get_sample_data(table)
-                    table_comment = await self.semantic_analyzer.infer_table_semantics_async(
-                        table, columns, sample_data
-                    )
-                except Exception as e:
-                    print(f"Error generating table semantics for {table}: {e}")
-                    table_comment = ""
-
-            # Process columns with semantics already analyzed in batch
-            processed_columns = []
-            for column in columns:
-                column_with_semantics = column.copy()
-                semantics = self.column_semantics.get(f"{table}.{column['name']}", "")
-                if semantics:
-                    column_with_semantics["semantics"] = semantics
-                processed_columns.append(column_with_semantics)
-
-            # Get sample data
-            sample_data = self.get_sample_data(table)
-            if sample_data:
-                schema_info["sample_data"][table] = sample_data
-
-            # Store table with its columns and comments
-            schema_info["tables"][table] = {
-                "columns": processed_columns,
-                "comment": table_comment if table_comment else ""
-            }
-
-        # Add relationship information with enhanced semantics
-        for fk in foreign_keys:
-            relationship = {
-                "table": fk["table"],
-                "column": fk["column"],
-                "references_table": fk["foreign_table"],
-                "references_column": fk["foreign_column"]
-            }
-
-            # Add semantics for the relationship
-            fk_semantic = self.column_semantics.get(f"{fk['table']}.{fk['column']}", "")
-            pk_semantic = self.column_semantics.get(f"{fk['foreign_table']}.{fk['foreign_column']}", "")
-
-            if fk_semantic or pk_semantic:
-                relationship["semantics"] = f"Connects {fk_semantic or fk['table']} to {pk_semantic or fk['references_table']}"
-
-            schema_info["relationships"].append(relationship)
-
-        # Clear progress indicators
-        if progress_placeholder:
-            progress_placeholder.empty()
-        if progress_bar:
-            progress_bar.empty()
-
-        self.schema_info = schema_info
-        return schema_info
-
-    def analyze_schema_with_llm(self) -> Dict[str, Any]:
-        """Synchronous wrapper for analyze_schema_with_llm_async."""
-        return asyncio.run(self.analyze_schema_with_llm_async())
-
     def analyze_schema(self) -> Dict[str, Any]:
         """
-        Analyze the database schema.
-        If LLM is available, use LLM-enhanced analysis, otherwise use heuristic approach.
-        """
-        try:
-            # Try with LLM-enhanced analysis first
-            return self.analyze_schema_with_llm()
-        except Exception as e:
-            print(f"LLM-enhanced schema analysis failed: {e}")
-            print("Falling back to heuristic approach...")
-            return self.analyze_schema_heuristic()
-
-    def analyze_schema_heuristic(self) -> Dict[str, Any]:
-        """
-        Analyze the database schema using heuristic approach (no LLM).
-        This is a fallback when LLM is unavailable or fails.
+        Analyze the database schema using a basic approach without LLM.
         """
         tables = self.get_tables()
         foreign_keys = self.get_foreign_keys()
@@ -580,8 +213,7 @@ class DatabaseAnalyzer:
             "tables": {},
             "relationships": [],
             "primary_keys": primary_keys,
-            "sample_data": {},
-            "column_semantics": {}
+            "sample_data": {}
         }
 
         # Get information about each table and its columns
@@ -591,19 +223,18 @@ class DatabaseAnalyzer:
             # Get table comment
             table_comment = self.get_comment_for_table(table)
 
-            # Process each column and add semantics using heuristics
+            # Process each column
             processed_columns = []
             for column in columns:
-                # Infer semantics for this column using heuristics
-                semantics = infer_column_semantics_heuristic(table, column["name"], column["type"])
+                # Get column comment if any
+                column_comment = self.get_comment_for_column(table, column["name"])
+                
+                # Add comment to column info if available
+                column_with_comment = column.copy()
+                if column_comment:
+                    column_with_comment["comment"] = column_comment
 
-                # Add semantics to column info
-                column_with_semantics = column.copy()
-                if semantics:
-                    column_with_semantics["semantics"] = semantics
-                    schema_info["column_semantics"][f"{table}.{column['name']}"] = semantics
-
-                processed_columns.append(column_with_semantics)
+                processed_columns.append(column_with_comment)
 
             # Store table with its columns and comments
             schema_info["tables"][table] = {
@@ -626,11 +257,10 @@ class DatabaseAnalyzer:
             })
 
         self.schema_info = schema_info
-        self.column_semantics = schema_info["column_semantics"]
         return schema_info
 
     def generate_schema_description(self) -> str:
-        """Generate a human-readable description of the database schema with LLM inferred semantics."""
+        """Generate a human-readable description of the database schema."""
         if not self.schema_info:
             self.analyze_schema()
 
@@ -653,9 +283,9 @@ class DatabaseAnalyzer:
 
                 description += f"  - {column['name']} ({column['type']}, {nullable}{default})"
 
-                # Add semantics if available
-                if "semantics" in column and column["semantics"]:
-                    description += f" - {column['semantics']}"
+                # Add comment if available
+                if "comment" in column and column["comment"]:
+                    description += f" - {column['comment']}"
 
                 description += "\n"
 
@@ -678,38 +308,18 @@ class DatabaseAnalyzer:
             for rel in self.schema_info["relationships"]:
                 description += f"  - {rel['table']}.{rel['column']} references {rel['references_table']}.{rel['references_column']}\n"
 
-                # Add semantics for the relationship if available
-                if "semantics" in rel:
-                    description += f"    ({rel['semantics']})\n"
-                else:
-                    fk_semantic = self.schema_info["column_semantics"].get(f"{rel['table']}.{rel['column']}", "")
-                    pk_semantic = self.schema_info["column_semantics"].get(f"{rel['references_table']}.{rel['references_column']}", "")
-
-                    if fk_semantic or pk_semantic:
-                        description += f"    (Connects "
-                        if fk_semantic:
-                            description += f"{fk_semantic} "
-                        description += f"to "
-                        if pk_semantic:
-                            description += f"{pk_semantic}"
-                        else:
-                            description += f"{rel['references_table']}"
-                        description += ")\n"
-
         return description
 
     def generate_schema_for_llm(self) -> str:
         """
-        Generate a comprehensive schema description for the LLM with enhanced semantics.
-        This provides detailed information about column meanings to help the LLM
-        generate more accurate SQL queries.
+        Generate a schema description for the LLM with simple format.
         """
         if not self.schema_info:
             self.analyze_schema()
 
         schema_text = "# Database Schema\n\n"
 
-        # Describe each table and its columns - simplified version
+        # Describe each table and its columns
         for table_name, table_info in self.schema_info["tables"].items():
             schema_text += f"## Table: {table_name}"
 
@@ -718,17 +328,17 @@ class DatabaseAnalyzer:
                 schema_text += f" - {table_info['comment']}"
             schema_text += "\n\n"
 
-            # Create a markdown table focused only on column names and meanings
-            schema_text += "| Column Name | Meaning |\n"
-            schema_text += "|------------|--------|\n"
+            # Create a markdown table for column info
+            schema_text += "| Column Name | Type | Description |\n"
+            schema_text += "|------------|------|-------------|\n"
 
             for column in table_info["columns"]:
-                semantics = column.get("semantics", "")
-                schema_text += f"| {column['name']} | {semantics} |\n"
+                comment = column.get("comment", "")
+                schema_text += f"| {column['name']} | {column['type']} | {comment} |\n"
 
             schema_text += "\n"
 
-        # Add simplified relationships section
+        # Add relationships section
         if self.schema_info["relationships"]:
             schema_text += "## Relationships\n\n"
 
