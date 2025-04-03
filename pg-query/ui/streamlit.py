@@ -121,7 +121,7 @@ def main():
 
     # Query input and submission
     question = st.text_area("Enter your question in plain English:", height=100,
-                            placeholder="e.g., 'What were the top 5 selling products last month?' or 'How many users signed up in 2023?'")
+                            placeholder="e.g., 'Who is the manager at each location?' or 'Which locations do I have excavators?'")
 
     col1, col2 = st.columns([1, 5])
     with col1:
