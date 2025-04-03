@@ -40,7 +40,7 @@ def main():
     st.sidebar.header("Runtime API Settings")
 
     # LLM Runtime connection settings
-    llama_host = st.sidebar.text_input("LLM Runtime API Host", "llama-service")
+    llama_host = st.sidebar.text_input("LLM Runtime API Host", "textsql-service")
     llama_port = st.sidebar.text_input("LLM Runtime API Port", "8080")
 
     # Initialize LLM button
@@ -154,14 +154,10 @@ Given the database schema below, generate a SQL query to answer the question.
 Question: {question}
 
 IMPORTANT GUIDELINES:
-1. Pay close attention to column semantics and meanings when choosing tables and columns.
-2. Distinguish between similar but functionally different columns
-3. Use appropriate joins based on the relationships defined in the schema.
-4. Ensure data types match when making comparisons.
-5. For date/time operations, use appropriate PostgreSQL functions.
-7. Use OR statements when you believe the information could be on two different columns
-8. Provide only ONE query, not multiple options.
-9. Use LIMIT and OFFSET if you need to return a limited number of results.
+1. Use appropriate joins based on the relationships defined in the schema.
+2. Ensure data types match when making comparisons.
+3. For date/time operations, use appropriate PostgreSQL functions.
+4. Provide only ONE query using triple backticks, not multiple options.
 
 REALLY IMPORTANT USE ILIKE STATEMENTS with % for everything that is text in the query
 

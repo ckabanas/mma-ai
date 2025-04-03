@@ -18,7 +18,7 @@ spec:
       - name: text-to-sql
         image: quay.io/daniel_casali/texttosql:v2
         ports:
-        - containerPort: 8080
+        - containerPort: 8501
         resources:
           limits:
             memory: "512Mi"
@@ -38,7 +38,7 @@ spec:
     app: text-to-sql
   ports:
   - port: 80
-    targetPort: 8080
+    targetPort: 8501
   type: ClusterIP
 ---
 apiVersion: route.openshift.io/v1
@@ -52,4 +52,4 @@ spec:
     kind: Service
     name: text-to-sql-service
   port:
-    targetPort: 80
+    targetPort: 8501
