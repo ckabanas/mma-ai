@@ -16,8 +16,9 @@ class LlamaInterface:
         json_data = {
             'prompt': prompt,
             'temperature': 0.1,
+            'repetition_penalty': 1.18,
             'n_predict': 500,
-            'stream': True,
+            'stream': False,
         }
 
         async with httpx.AsyncClient(timeout=120) as client:
