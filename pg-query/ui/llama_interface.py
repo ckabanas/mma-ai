@@ -18,7 +18,7 @@ class LlamaInterface:
             'temperature': 0.1,
             'repetition_penalty': 1.18,
             'n_predict': 500,
-            'stream': False,
+            'stream': True,
         }
 
         async with httpx.AsyncClient(timeout=120) as client:
