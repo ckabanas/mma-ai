@@ -38,7 +38,7 @@ spec:
         - name: POSTGRES_USER
           value: "postgres"
         - name: POSTGRES_DB
-          value: "rentalco"
+          value: "postgres"
         resources:
           limits:
             memory: "512Mi"
