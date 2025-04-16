@@ -31,7 +31,7 @@ spec:
           resources: {}
       containers:
         - name: textsql
-          image: quay.io/daniel_casali/llama.cpp-mma:v4
+          image: quay.io/daniel_casali/llama.cpp-mma:v8
           imagePullPolicy: Always
           args: ["-m", "/models/google_gemma-3-4b-it-Q4_K_M.gguf", "--prio", "3", "-c", "2000","-b", "48", "-t", "32" ]
           ports:
