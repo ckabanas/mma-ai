@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: text-to-sql
-        image: quay.io/daniel_casali/texttosql:v3
+        image: quay.io/daniel_casali/texttosql:v4
         ports:
         - containerPort: 8501
         resources:
