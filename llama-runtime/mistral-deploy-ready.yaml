@@ -23,7 +23,8 @@ spec:
             - '-c'
             - |
               if [ ! -f /models/mistral-7b-instruct-v0.3.Q4_K_M.gguf ] ; then
-                curl -L https://huggingface.co/SanctumAI/Mistral-7B-Instruct-v0.3-GGUF/resolve/main/mistral-7b-instruct-v0.3.Q4_K_M.gguf --output /models/mistral-7b-instruct-v0.3.Q4_K_M.gguf
+                #curl -L https://huggingface.co/SanctumAI/Mistral-7B-Instruct-v0.3-GGUF/resolve/main/mistral-7b-instruct-v0.3.Q4_K_M.gguf --output /models/mistral-7b-instruct-v0.3.Q4_K_M.gguf
+                curl -L https://huggingface.co/bartowski/google_gemma-3-4b-it-GGUF/resolve/main/google_gemma-3-4b-it-Q4_K_M.gguf --output /models/mistral-7b-instruct-v0.3.Q4_K_M.gguf
               else
                 echo "model /models/mistral-7b-instruct-v0.3.Q4_K_M.gguf already present"
               fi
