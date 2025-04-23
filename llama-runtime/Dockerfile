@@ -12,9 +12,9 @@ RUN git clone https://github.com/ggml-org/llama.cpp.git && \
     sed -i "s/powerpc64le/native -mvsx -mtune=native -D__POWER10_VECTOR__/g" ggml/src/CMakeLists.txt && \
     mkdir build && \
     cd build && \
-    cmake -G Ninja .. || (echo '❌ cmake failed!' && cat CMakeFiles/CMakeError.log CMakeFiles/CMakeOutput.log || true) && \
-    cmake --build . --config Release || echo '❌ build failed!'
-
+    cmake -G Ninja -DLLAMA_CURL=OFF .. && \
+    cmake --build . --config Release
+  
 CMD bash
 
 FROM registry.access.redhat.com/ubi9/ubi
