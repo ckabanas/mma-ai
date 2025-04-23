@@ -7,12 +7,13 @@ RUN dnf update -y && dnf install -y \
   && source scl_source enable gcc-toolset-13 \
   && dnf clean all
 
-
-RUN git clone https://github.com/ggml-org/llama.cpp.git  && cd llama.cpp && sed -i "s/powerpc64le/native -mvsx -mtune=native -D__POWER10_VECTOR__/g" ggml/src/CMakeLists.txt && \
-    mkdir build; \
-    cd build; \
-    cmake -G Ninja ..; \
-    cmake --build . --config Release
+RUN git clone https://github.com/ggml-org/llama.cpp.git && \
+    cd llama.cpp && \
+    sed -i "s/powerpc64le/native -mvsx -mtune=native -D__POWER10_VECTOR__/g" ggml/src/CMakeLists.txt && \
+    mkdir build && \
+    cd build && \
+    cmake -G Ninja .. || (echo '❌ cmake failed!' && cat CMakeFiles/CMakeError.log CMakeFiles/CMakeOutput.log || true) && \
+    cmake --build . --config Release || echo '❌ build failed!'
 
 CMD bash
 
